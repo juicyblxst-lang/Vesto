@@ -1,36 +1,46 @@
 # Vesto
 
-**Ideas → positions.**
+Vesto turns investment ideas into transparent, user-controlled onchain positions.
 
-Vesto is a social investing MVP for tokenized assets on Base. It turns an investment idea into a transparent model portfolio that people can discover, discuss, remix, and — where an eligible executable market route exists — execute from their own wallet.
-
-## MVP loop
-
-`DISCOVER → THESIS → PORTFOLIO → DISCUSS → AI PRESSURE TEST → REMIX → INVEST`
+**DISCOVER → THESIS → PORTFOLIO → DISCUSS → AI PRESSURE TEST → REMIX → INVEST**
 
 ## What is real
 
-- Base mainnet wallet connection through an injected wallet.
-- Official Coinbase Tokenized Stock contract registry sourced from Base's current public stock listing.
-- Real USDC balance approval + 0x executable quote flow when `ZEROX_API_KEY` is configured.
-- User signs every onchain transaction; Vesto never receives private keys or custody.
-- Transaction links go to BaseScan.
+- Base mainnet wallet connection through Wagmi/injected wallets.
+- Verified Coinbase tokenized-stock contract addresses are kept in `lib/assets.ts`.
+- Indicative and firm execution quotes use the 0x Swap API v2 AllowanceHolder flow when `ZEROX_API_KEY` is configured.
+- Approvals are requested only for the allowance target returned by 0x; Vesto does not hardcode a swap spender.
+- The final swap transaction is signed by the user's wallet and the UI waits for the Base receipt before calling it confirmed.
+- USDC and token balances are read from Base directly.
+- Social interactions, saved remixes and execution history use Postgres when `DATABASE_URL` is configured.
+- AI pressure testing uses the OpenAI Responses API when `OPENAI_API_KEY` is configured.
 
-## What is intentionally not faked
+## Truthful fallback behavior
 
-If a route, market, eligibility condition, or API integration is unavailable, Vesto reports that state instead of fabricating a price, fill, balance, or transaction.
+Vesto does not fake unavailable infrastructure. Without production credentials, the affected feature fails closed with an explicit configuration message. Starter theses and asset metadata are static product content, not fabricated live market data.
 
-## Run
+## Environment
 
-```bash
-npm install
-npm run dev
-```
+Copy `.env.example` to `.env.local` for local development. Supply:
 
-Set `ZEROX_API_KEY` in the deployment environment to enable the real swap execution path. `NEXT_PUBLIC_BASE_RPC_URL` can override the default Base RPC.
+- `ZEROX_API_KEY` for executable Base swaps.
+- `DATABASE_URL` plus `db/schema.sql` for server-side social/remix/execution persistence.
+- `OPENAI_API_KEY` for live AI pressure testing; `OPENAI_MODEL` is optional.
+- `NEXT_PUBLIC_BASE_RPC_URL` optionally points the client at your Base RPC provider.
 
-## Product thesis
+Never put private wallet keys in Vesto. The application is non-custodial and only asks the connected wallet to sign transactions.
 
-Tokenized stocks are now live on Base as B20 tokens backed 1:1 by underlying shares. The product opportunity is the layer above the rails: make investment ideas social and make the path from idea to self-custodied position understandable.
+## Production setup
 
-Vesto is informational software, not a broker or investment adviser. Users are responsible for reviewing issuer disclosures and their own eligibility before transacting.
+1. Deploy the Next.js app.
+2. Add the environment variables in the deployment provider.
+3. Run `db/schema.sql` against the production Postgres database.
+4. Connect a Base mainnet wallet and verify the chain is 8453.
+5. Test quote, approval, swap submission and receipt confirmation with a small amount.
+6. Verify every resulting transaction directly on BaseScan.
+
+## Important eligibility and risk note
+
+Coinbase tokenized stocks are subject to issuer terms, jurisdictional restrictions, market/liquidity risk and other risks. Vesto does not determine eligibility. Users must verify that they are eligible and review the issuer/provider disclosures before interacting with these assets.
+
+Vesto is software infrastructure and educational tooling, not personalized investment, legal or tax advice.
