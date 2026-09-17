@@ -1,2 +1,45 @@
-import Link from 'next/link'; import {theses} from '../../../lib/assets'; import {notFound} from 'next/navigation';
-export default async function Thesis({params}:{params:Promise<{id:string}>}){const {id}=await params;const t=theses.find(x=>x.id===id);if(!t)return notFound();return <main className="shell"><nav className="nav"><Link className="brand" href="/">ves<span>to</span></Link><div className="navlinks"><Link href="/discover">Discover</Link><Link href="/feed">Feed</Link><Link href="/portfolio">Portfolio</Link></div><Link className="btn" href="/wallet">Wallet</Link></nav><section className="hero"><span className="tag">{t.tags.join(' · ')}</span><h1>{t.title}</h1><p>{t.summary}</p><small className="muted">Published by {t.creator} · version 1 · transparent allocation</small></section><div className="feed"><section className="card"><h2>Portfolio</h2>{t.assets.map(([symbol,weight])=><div className="assetrow" key={symbol}><div><b>{symbol}</b><div className="muted">Target allocation</div></div><strong>{weight}%</strong></div>)}<div className="actions"><Link className="btn primary" href="/portfolio">Build this portfolio</Link><button className="btn">Follow</button></div></section><section className="card"><h2>AI analyst</h2><p className="muted">Ask Vesto to pressure-test this idea before you act.</p><div className="card"><b>What could invalidate this thesis?</b><p className="muted">Concentration in AI infrastructure means valuation compression, demand normalization, or platform shifts could materially change the thesis.</p></div><small className="muted">Analysis is informational, not personalized investment advice.</small></section></div></main>}
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useAccount } from 'wagmi';
+import { assets, theses } from '../../../lib/assets';
+import { InvestPanel } from '../../../components/InvestPanel';
+
+export default function ThesisPage({ params }: { params: { id: string } }) {
+  const thesis = useMemo(() => theses.find(t => t.id === params.id) || theses[0], [params.id]);
+  const { address } = useAccount();
+  const [social, setSocial] = useState<any>(null);
+  const [comment, setComment] = useState('');
+  const [analysis, setAnalysis] = useState('');
+  const [aiStatus, setAiStatus] = useState('');
+
+  const loadSocial = async () => { try { const r = await fetch(`/api/social?thesisId=${thesis.id}`, { cache: 'no-store' }); const d = await r.json(); if (r.ok) setSocial(d); } catch {} };
+  useEffect(() => { loadSocial(); }, [thesis.id]);
+
+  const act = async (action: string, extra: Record<string, string> = {}) => {
+    if (!address) { setAiStatus('Connect your wallet to interact with this thesis.'); return; }
+    const r = await fetch('/api/social', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallet: address, thesisId: thesis.id, action, title: thesis.title, thesis: thesis.summary, allocations: thesis.assets, ...extra }) });
+    const d = await r.json(); if (!r.ok) setAiStatus(d.error || 'Social persistence is unavailable.'); else { setComment(''); setAiStatus('Saved.'); loadSocial(); }
+  };
+
+  const pressureTest = async () => {
+    setAiStatus('Running AI pressure test…'); setAnalysis('');
+    const r = await fetch('/api/pressure-test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thesis: thesis.summary, allocations: thesis.assets }) });
+    const d = await r.json();
+    if (!r.ok) setAiStatus(d.error || 'AI is not configured.'); else { setAnalysis(d.text); setAiStatus(''); }
+  };
+
+  return <main className="shell">
+    <nav className="nav"><Link className="brand" href="/">VESTO</Link><div className="navlinks"><Link href="/discover">Discover</Link><Link href="/feed">Feed</Link><Link href="/portfolio">Portfolio</Link><Link href="/wallet">Wallet</Link></div></nav>
+    <section className="section">
+      <span className="eyebrow">INVESTMENT IDEA</span><h1>{thesis.title}</h1><p className="muted">by {thesis.creator} · {thesis.summary}</p>
+      <div className="grid">
+        <div className="card"><h3>Portfolio</h3>{thesis.assets.map(([symbol, weight]) => { const asset = assets.find(a => a.symbol === symbol)!; return <div className="assetrow" key={symbol}><div><b>{symbol}</b><div className="muted">{asset.name}</div></div><strong>{weight}%</strong></div>; })}<div style={{display:'flex',gap:8,marginTop:16,flexWrap:'wrap'}}><button className="btn primary" onClick={() => act('follow')}>Follow thesis</button><button className="btn" onClick={() => act('like')}>Like · {social?.likes ?? 0}</button><button className="btn" onClick={() => act('remix')}>Remix · {social?.remixes ?? 0}</button></div></div>
+        <div className="card"><h3>AI pressure test</h3><p className="muted">Neutral analysis of assumptions, risks and disconfirming evidence. It never places a trade.</p><button className="btn" onClick={pressureTest}>Run pressure test</button>{analysis && <pre style={{whiteSpace:'pre-wrap',fontFamily:'inherit',lineHeight:1.6,marginTop:16}}>{analysis}</pre>}{aiStatus && <p className="muted">{aiStatus}</p>}</div>
+      </div>
+    </section>
+    <section className="section"><h2>Discuss</h2><div className="card"><textarea value={comment} onChange={e=>setComment(e.target.value)} maxLength={1000} placeholder="Add a thesis-level comment…" style={{width:'100%',minHeight:100,background:'transparent',color:'inherit',border:'1px solid rgba(255,255,255,.15)',borderRadius:12,padding:12}}/><button className="btn primary" style={{marginTop:10}} onClick={()=>act('comment',{text:comment})}>Post comment</button>{social?.comments?.map((c:any)=><div className="idea" key={c.id}><b>{c.wallet_address.slice(0,6)}…{c.wallet_address.slice(-4)}</b><p>{c.body}</p></div>)}</div></section>
+    <section className="section"><h2>Put the idea onchain</h2><p className="muted">Execution is optional and wallet-controlled. Vesto never takes custody of funds.</p>{thesis.assets.slice(0,1).map(([symbol])=>{const asset=assets.find(a=>a.symbol===symbol)!;return <InvestPanel key={symbol} token={asset.address as `0x${string}`} symbol={asset.symbol} thesisId={thesis.id}/>})}</section>
+  </main>;
+}
